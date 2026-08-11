@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 
-LLAMA_CPP_RELEASE_TAG = "b8840"
+LLAMA_CPP_RELEASE_TAG = "b10472"
 RELEASE_API_URL = f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{LLAMA_CPP_RELEASE_TAG}"
 PACKAGE_ROOT = Path(__file__).resolve().parent
 VENDOR_ROOT = PACKAGE_ROOT / "vendor" / "llama.cpp"
@@ -174,12 +174,8 @@ def _is_complete_install(install_dir: Path, spec: PlatformSpec) -> bool:
 
 
 def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
-    if not VENDOR_ROOT.exists():
-        return None
-    for install_dir in VENDOR_ROOT.glob(f"*/{spec.key}"):
-        if _is_complete_install(install_dir, spec):
-            return _find_cli_paths(install_dir, spec)
-    return None
+    install_dir = VENDOR_ROOT / LLAMA_CPP_RELEASE_TAG / spec.key
+    return _find_cli_paths(install_dir, spec) if _is_complete_install(install_dir, spec) else None
 
 
 def _extract_assets(assets: list[dict], install_dir: Path) -> None:

@@ -54,9 +54,36 @@ Open ComfyUI Manager, choose `Install Custom Nodes`, search for
 `LLM Text Processor`, install it, then restart ComfyUI.
 
 ### Manual Git Clone
+> `LINUX INSTRUCTIONS`
 
-Open a terminal in `ComfyUI/custom_nodes` and run:
+Either install `llama.cpp` from your distribution package manager (the version you get depends heavily upon your linux flavor and release)
+OR you can download and build llama-cli to suit your system
+```bash
+git clone https://github.com/ggml-org/llama.cpp.git
+```
 
+OR, the fork of llama-cpp-python which adds support for newer models AND pulls in the llama.cpp source as a dependancy
+to build `.so` files, you can `cd` into the `vendor` folder and build the llama.cpp `Release` binaries after building the python library.
+```bash
+git clone https://github.com/JamePeng/llama-cpp-python.git
+```
+Refer to the llama.cpp build documentation for a brief overview of build options. You will more than likely need to build in a container (I suggest distrobox, you can enter your comfyUI venv while also using a special build environment)
+
+Move those llama-cpp release binaries somewhere useful like ~/.local/bin or ~/.llamacpp/bin and add that location to $PATH
+Anything like adding to ~/.bashrc or adding that location in a startup script, whatever gets it done for your purposes best.
+```bash
+export PATH="/your/llama-cpp-binaries-location/here:$PATH"
+```
+
+In your terminal go to `ComfyUI/custom_nodes` and run:
+```bash
+git clone https://github.com/KingManiya/ComfyUI-LLM-text-processor.git
+```
+
+---
+> `WINDOWS INSTRUCTIONS`
+
+In your terminal go to `ComfyUI/custom_nodes` and run:
 ```bash
 git clone https://github.com/KingManiya/ComfyUI-LLM-text-processor.git
 ```

@@ -9,16 +9,20 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
+from typing import Final
+import shutil
+from .utils import makered
 
 LLAMA_CPP_RELEASE_TAG = "b10472"
 RELEASE_API_URL = f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{LLAMA_CPP_RELEASE_TAG}"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-VENDOR_ROOT = PACKAGE_ROOT / "vendor" / "llama.cpp"
-
+VENDOR_ROOT = PACKAGE_ROOT / "vendor" / "llama.cpp" 
 
 @dataclass(frozen=True)
 class PlatformSpec:
+    '''
+    Generic platform specification prototype
+    '''
     key: str
     cli_executable: str
     asset_patterns: tuple[str, ...]
@@ -27,10 +31,13 @@ class PlatformSpec:
 
 @dataclass(frozen=True)
 class LlamaCliPaths:
+    '''
+    System paths to llama.cpp binaries
+    '''
     cli: Path
+    server: Path
 
-
-WINDOWS_CUDA_13 = PlatformSpec(
+WINDOWS_CUDA_13: Final[PlatformSpec] = PlatformSpec(
     key="win-x64-cuda13",
     cli_executable="llama-cli.exe",
     asset_patterns=(
@@ -44,16 +51,45 @@ WINDOWS_CUDA_13 = PlatformSpec(
     ),
 )
 
+# TEST LOCATION
+#/home/Meeper/AI-software/LlamaStuff/llama.cpp/build/bin/
+#you need to build LLAMA.CPP seperately and move it somewhere
+# I built for ROCM and Vulkan on gfx1036, gfx1030, gfx 1101
+
+LINUX_x86_64: Final[PlatformSpec] = PlatformSpec(
+    key="linux",
+    cli_executable="llama-cli",
+    asset_patterns=(
+    ),
+    required_files=(
+        "llama-cli",
+        # "llama-server",
+    ),
+)
 
 def _platform_spec() -> PlatformSpec:
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    if system == "windows" and machine in {"amd64", "x86_64"}:
-        return WINDOWS_CUDA_13
-    raise RuntimeError(
-        "Automatic llama.cpp binary download currently supports Windows x64 CUDA 13 only. "
-        "Other platforms are intentionally isolated behind the platform mapping for future support."
-    )
+    '''
+    Get's machine information to determine what platform is running
+
+    Add to this to extend with more systems, in concert with the creation of more PlatformSpec
+    '''
+    try:
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        if system == "linux" and machine in {"amd64", "x86_64"}:
+                return LINUX_x86_64
+        if system == "windows" and machine in {"amd64", "x86_64"}:
+            return WINDOWS_CUDA_13
+        raise RuntimeError(
+            "Automatic llama.cpp binary download currently supports Windows x64 CUDA 13 only. "
+            "Other platforms are intentionally isolated behind the platform mapping for future support."
+        )
+    except:
+        raise RuntimeError(
+            "Currently, only linux and windows 64-bit is supported"
+        )
+        
+
 
 
 def _json_get(url: str) -> dict:
@@ -75,6 +111,9 @@ def _format_size(num_bytes: float) -> str:
 
 
 def _download(url: str, destination: Path) -> None:
+    '''
+    Windows specific, obtains llamacpp package
+    '''
     request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
     with urllib.request.urlopen(request, timeout=120) as response:
         total_size = response.headers.get("Content-Length")
@@ -128,6 +167,9 @@ def _download(url: str, destination: Path) -> None:
 
 
 def _select_assets(release: dict, spec: PlatformSpec) -> list[dict]:
+    '''
+    Validates that all assets necessary for use are available
+    '''
     assets = release.get("assets", [])
     selected = []
     used_names = set()
@@ -149,6 +191,7 @@ def _select_assets(release: dict, spec: PlatformSpec) -> list[dict]:
 
 
 def _find_file(install_dir: Path, name: str) -> Path | None:
+
     for path in install_dir.rglob(name):
         if path.is_file():
             return path
@@ -156,6 +199,7 @@ def _find_file(install_dir: Path, name: str) -> Path | None:
 
 
 def _find_cli_paths(install_dir: Path, spec: PlatformSpec) -> LlamaCliPaths | None:
+
     cli = _find_file(install_dir, spec.cli_executable)
     if cli is None:
         return None
@@ -163,6 +207,7 @@ def _find_cli_paths(install_dir: Path, spec: PlatformSpec) -> LlamaCliPaths | No
 
 
 def _has_required_files(install_dir: Path, spec: PlatformSpec) -> bool:
+
     for name in spec.required_files:
         if not any(path.is_file() for path in install_dir.rglob(name)):
             return False
@@ -170,15 +215,22 @@ def _has_required_files(install_dir: Path, spec: PlatformSpec) -> bool:
 
 
 def _is_complete_install(install_dir: Path, spec: PlatformSpec) -> bool:
+    '''
+    Ensures files for windows llamacpp operation are installed
+    '''
     return _find_cli_paths(install_dir, spec) is not None and _has_required_files(install_dir, spec)
 
 
 def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
+    '''
+    Checks if there is an existing llamacpp installation
+    '''
     install_dir = VENDOR_ROOT / LLAMA_CPP_RELEASE_TAG / spec.key
     return _find_cli_paths(install_dir, spec) if _is_complete_install(install_dir, spec) else None
 
 
 def _extract_assets(assets: list[dict], install_dir: Path) -> None:
+
     with TemporaryDirectory(prefix="llm-text-processor-llama-download-") as temp:
         temp_dir = Path(temp)
         for asset in assets:
@@ -188,13 +240,22 @@ def _extract_assets(assets: list[dict], install_dir: Path) -> None:
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(install_dir)
 
+def linux_spec_ops(spec:PlatformSpec) -> LlamaCliPaths:
+    '''
+    Action performed when linux is base OS
+    This function currently assumes llamacpp is already installed and in the users PATH
+    To extend with automatic llamacpp build support, perform that action before this step
+    and create a validation function to ensure it built and installed properly
+    '''
+    print("Running Linux, assuming user built llama-cpp with latest release, skipping Windows specific code")
+    # grabs llama-cli binary location from PATH
+    paths = LlamaCliPaths(cli=Path(shutil.which("llama-cli")))
+    return paths
 
-def ensure_llama_cli_paths() -> LlamaCliPaths:
-    spec = _platform_spec()
-    existing = _existing_install(spec)
-    if existing is not None:
-        return existing
-
+def windows_spec_ops(spec:PlatformSpec) -> LlamaCliPaths:
+    ''' 
+    Action performed when windows is base OS
+    '''
     release = _json_get(RELEASE_API_URL)
     tag = release.get("tag_name") or LLAMA_CPP_RELEASE_TAG
     install_dir = VENDOR_ROOT / tag / spec.key
@@ -220,5 +281,28 @@ def ensure_llama_cli_paths() -> LlamaCliPaths:
             if not any(path.is_file() for path in install_dir.rglob(name))
         ]
         raise RuntimeError(f"Downloaded llama.cpp assets are incomplete; missing: {', '.join(missing)}")
-
     return paths
+
+
+def ensure_llama_cli_paths() -> LlamaCliPaths:
+    '''
+    Validates if everything is fine for operation
+    '''
+    # get platform details
+    spec = _platform_spec()
+
+    # FIRST check
+    # if Existing windows llamacpp installation
+    existing = _existing_install(spec)
+    if existing is not None:
+        return existing
+    try:
+        #Check for platform type
+        if spec.key == "linux":
+            llama_cli_paths = linux_spec_ops(spec)
+        if spec.key == "windows":
+            llama_cli_paths = windows_spec_ops(spec)
+    except:
+        raise RuntimeError(makered("[ERROR] Neither windows or linux detected"))    
+
+    return llama_cli_paths
